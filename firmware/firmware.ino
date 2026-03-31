@@ -6,17 +6,18 @@
  * Payload : {"ts","temp_c","rh_pct","tvoc_ppb","eco2_ppm","dust_ugm3","aqi","device_id"}
  *******************************************************/
 
-#include <Wire.h>               // I2C
-#include "ScioSense_ENS160.h"   // ENS160
-#include <GP2YDustSensor.h>     // GP2Y dust
-#include "Adafruit_SHT31.h"     // SHT31
-#include <TFT_eSPI.h>           // TFT
-#include <SPI.h>                // SPI
-#include <lvgl.h>               // LVGL v8/v9
-#include <WiFi.h>               // WiFi
-#include <PubSubClient.h>       // MQTT
-#include <time.h>               // NTP/time
-#include "esp_timer.h"          // esp_timer untuk LVGL tick (core 3.x)
+#include <Wire.h>
+#include "ScioSense_ENS160.h"
+#include <GP2YDustSensor.h>
+#include "Adafruit_SHT31.h"
+#include <TFT_eSPI.h>
+#include <SPI.h>
+#include <lvgl.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <time.h>
+#include "esp_timer.h"
+#include <esp_wifi.h>           // FIX #7 — untuk MAC address client ID
 
 /*********** WiFi & MQTT Config ***********/
 #define WIFI_SSID     "Redmi Note 12"
@@ -25,6 +26,9 @@
 #define MQTT_PORT     1883
 #define MQTT_TOPIC    "uninus/iot/air_quality/esp32-01"
 #define DEVICE_ID     "esp32-01-client-io"
+
+// FIX #11 — I2C address SHT31 jadi konstanta, bukan magic number
+#define SHT31_I2C_ADDR  0x44
 
 /*********** NTP (Asia/Jakarta = UTC+7) **********/
 const long  GMT_OFFSET_SEC = 7 * 3600;
@@ -42,14 +46,13 @@ lv_display_t *disp;
 #define BUF_LINES     5
 static lv_color_t buf1[SCREEN_WIDTH * BUF_LINES];
 
-// LVGL tick 1 ms via esp_timer
 static esp_timer_handle_t lvgl_tick_timer;
 static void lvgl_tick_cb(void* arg) { lv_tick_inc(1); }
 
 /*********** Pins ***********/
-const uint8_t SHARP_LED_PIN = 25; // GP2Y LED
-const uint8_t SHARP_VO_PIN  = 34; // GP2Y analog out
-const uint8_t TFT_BL_PIN    = 32; // backlight
+const uint8_t SHARP_LED_PIN = 25;
+const uint8_t SHARP_VO_PIN  = 34;
+const uint8_t TFT_BL_PIN    = 32;
 
 /*********** Sensors ***********/
 ScioSense_ENS160 ens160(ENS160_I2CADDR_1);
@@ -67,18 +70,25 @@ lv_obj_t *create_card(lv_obj_t *parent, const char *title, lv_color_t bg_color, 
 void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map);
 
 /*********** Running Average ***********/
+// FIX #1 — tambah humBuffer
+// FIX #2 — tambah aqiBuffer
 #define AVG_WINDOW 10
 float tempBuffer[AVG_WINDOW];
+float humBuffer[AVG_WINDOW];   // FIX #1
 int   tvocBuffer[AVG_WINDOW];
 int   eco2Buffer[AVG_WINDOW];
 float dustBuffer[AVG_WINDOW];
-int   avgIndex = 0;
+int   aqiBuffer[AVG_WINDOW];   // FIX #2
+int   avgIndex    = 0;
 bool  bufferFilled = false;
 
 /*********** Network ***********/
-WiFiClient espClient;
+WiFiClient   espClient;
 PubSubClient client(espClient);
 
+// ─────────────────────────────────────────
+//  WiFi
+// ─────────────────────────────────────────
 void connectWiFi() {
   Serial.print("Connecting to WiFi");
   WiFi.mode(WIFI_STA);
@@ -88,21 +98,34 @@ void connectWiFi() {
   Serial.print("IP Address: "); Serial.println(WiFi.localIP());
 }
 
+// ─────────────────────────────────────────
+//  MQTT  — FIX #6: max 5 retries, tidak blocking selamanya
+//          FIX #7: client ID unik pakai MAC address
+// ─────────────────────────────────────────
 void connectMQTT() {
-  client.setServer(MQTT_SERVER, MQTT_PORT);
-  while (!client.connected()) {
-    Serial.print("Connecting to MQTT...");
-    if (client.connect("ESP32_AQM")) {
-      Serial.println("connected!");
+  // FIX #7 — client ID unik dari DEVICE_ID + potongan MAC
+  String clientId = String(DEVICE_ID) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+
+  int retries = 0;
+  while (!client.connected() && retries < 5) {
+    Serial.printf("Connecting to MQTT (attempt %d/5)...\n", retries + 1);
+    if (client.connect(clientId.c_str())) {
+      Serial.println("MQTT connected!");
     } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" retrying in 2s...");
+      Serial.printf("failed, rc=%d — retrying in 2s\n", client.state());
+      retries++;
       delay(2000);
     }
   }
+
+  if (!client.connected()) {
+    Serial.println("MQTT: failed after 5 retries, will retry next cycle.");
+  }
 }
 
+// ─────────────────────────────────────────
+//  NTP
+// ─────────────────────────────────────────
 static void waitForNTP() {
   struct tm ti;
   Serial.print("Sync NTP");
@@ -110,7 +133,9 @@ static void waitForNTP() {
   Serial.println(" OK");
 }
 
-/*********** LVGL Flush ***********/
+// ─────────────────────────────────────────
+//  LVGL Flush
+// ─────────────────────────────────────────
 void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
   uint32_t w = area->x2 - area->x1 + 1;
   uint32_t h = area->y2 - area->y1 + 1;
@@ -124,19 +149,27 @@ void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
   lv_display_flush_ready(disp);
 }
 
-/*********** Averaging Helpers ***********/
+// ─────────────────────────────────────────
+//  Averaging Helpers
+//  FIX #3 — averageInt return int (bukan float), return 0 (bukan NAN) untuk int
+// ─────────────────────────────────────────
 float averageFloat(float *buf, int size) {
   if (size <= 0) return NAN;
-  float sum = 0; for (int i = 0; i < size; i++) sum += buf[i];
+  float sum = 0;
+  for (int i = 0; i < size; i++) sum += buf[i];
   return sum / size;
 }
-float averageInt(int *buf, int size) {
-  if (size <= 0) return NAN;
-  long sum = 0; for (int i = 0; i < size; i++) sum += buf[i];
-  return (float)sum / size;
+
+int averageInt(int *buf, int size) {   // FIX #3 — return int
+  if (size <= 0) return 0;            // FIX #3 — return 0, bukan NAN
+  long sum = 0;
+  for (int i = 0; i < size; i++) sum += buf[i];
+  return (int)(sum / size);
 }
 
-/******************** SETUP ********************/
+// ─────────────────────────────────────────
+//  SETUP
+// ─────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
   Wire.begin(21, 22);
@@ -152,10 +185,10 @@ void setup() {
   lv_init();
 
   const esp_timer_create_args_t lvgl_timer_args = {
-    .callback = &lvgl_tick_cb,
-    .arg = nullptr,
+    .callback        = &lvgl_tick_cb,
+    .arg             = nullptr,
     .dispatch_method = ESP_TIMER_TASK,
-    .name = "lvgl_tick"
+    .name            = "lvgl_tick"
   };
   ESP_ERROR_CHECK(esp_timer_create(&lvgl_timer_args, &lvgl_tick_timer));
   ESP_ERROR_CHECK(esp_timer_start_periodic(lvgl_tick_timer, 1000));
@@ -167,11 +200,21 @@ void setup() {
   Serial.println("Initializing sensors...");
   if (!ens160.begin()) Serial.println("ENS160 not found!");
   else { ens160.setMode(ENS160_OPMODE_STD); Serial.println("ENS160 OK"); }
-  if (!sht31.begin(0x44)) { Serial.println("SHT31 not found!"); while (1) delay(1); }
+
+  if (!sht31.begin(SHT31_I2C_ADDR)) {   // FIX #11 — pakai konstanta
+    Serial.println("SHT31 not found!");
+    while (1) delay(1);
+  }
   dustSensor.begin();
 
+  // Init semua buffer ke 0
   for (int i = 0; i < AVG_WINDOW; i++) {
-    tempBuffer[i]=0; tvocBuffer[i]=0; eco2Buffer[i]=0; dustBuffer[i]=0;
+    tempBuffer[i] = 0;
+    humBuffer[i]  = 0;   // FIX #1
+    tvocBuffer[i] = 0;
+    eco2Buffer[i] = 0;
+    dustBuffer[i] = 0;
+    aqiBuffer[i]  = 0;   // FIX #2
   }
 
   ui_create();
@@ -180,17 +223,37 @@ void setup() {
   connectWiFi();
   configTime(GMT_OFFSET_SEC, DST_OFFSET_SEC, NTP1, NTP2, NTP3);
   waitForNTP();
+
+  // FIX #4 — setServer dipindah ke setup(), bukan di dalam connectMQTT()
+  client.setServer(MQTT_SERVER, MQTT_PORT);
   connectMQTT();
 
   Serial.println("System ready.\n");
 }
 
-/********************* LOOP *********************/
+// ─────────────────────────────────────────
+//  LOOP
+// ─────────────────────────────────────────
 void loop() {
-  lv_timer_handler();
-  delay(5);
+  // FIX #5 — auto-reconnect WiFi
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi disconnected, reconnecting...");
+    WiFi.reconnect();
+    unsigned long wifiStart = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 10000) {
+      delay(500);
+      Serial.print(".");
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nWiFi reconnected!");
+    } else {
+      Serial.println("\nWiFi reconnect failed, will retry next cycle.");
+    }
+  }
 
-  client.loop();   // <-- FIX: MQTT keep-alive stays alive
+  // FIX #8 — hapus delay(5), biarkan loop() jalan bebas agar LVGL responsif
+  lv_timer_handler();
+  client.loop();
 
   static unsigned long lastUpdate = 0;
   unsigned long now = millis();
@@ -198,6 +261,7 @@ void loop() {
   if (now - lastUpdate >= 5000) {
     lastUpdate = now;
 
+    // Baca sensor
     float t = sht31.readTemperature();
     float h = sht31.readHumidity();
     if (isnan(t) || isnan(h)) {
@@ -211,37 +275,48 @@ void loop() {
     int aqi  = ens160.getAQI();
     int tvoc = ens160.getTVOC();
     int eco2 = ens160.geteCO2();
-
     float dust = dustSensor.getDustDensity();
 
+    // Isi semua buffer — FIX #1 (hum) dan FIX #2 (aqi)
     tempBuffer[avgIndex] = t;
+    humBuffer[avgIndex]  = h;     // FIX #1
     tvocBuffer[avgIndex] = tvoc;
     eco2Buffer[avgIndex] = eco2;
     dustBuffer[avgIndex] = dust;
+    aqiBuffer[avgIndex]  = aqi;   // FIX #2
     avgIndex++;
 
     if (avgIndex >= AVG_WINDOW) { avgIndex = 0; bufferFilled = true; }
     int used = bufferFilled ? AVG_WINDOW : avgIndex;
 
     float avgT    = averageFloat(tempBuffer, used);
-    float avgTVOC = averageInt(tvocBuffer, used);
-    float avgECO2 = averageInt(eco2Buffer, used);
+    float avgH    = averageFloat(humBuffer,  used);   // FIX #1
+    int   avgTVOC = averageInt(tvocBuffer,   used);   // FIX #3 — terima int langsung
+    int   avgECO2 = averageInt(eco2Buffer,   used);   // FIX #3
     float avgDust = averageFloat(dustBuffer, used);
+    int   avgAQI  = averageInt(aqiBuffer,    used);   // FIX #2
 
-    update_display(avgT, h, aqi, (int)avgTVOC, (int)avgECO2, avgDust);
+    // Update display pakai semua nilai yang sudah di-average — FIX #1 #2
+    update_display(avgT, avgH, avgAQI, avgTVOC, avgECO2, avgDust);
 
+    // MQTT reconnect jika terputus
     if (!client.connected()) connectMQTT();
 
+    // FIX #10 — jika NTP belum siap, skip publish (tidak blocking LVGL)
     time_t epoch = time(NULL);
-    if (epoch < 100000) { waitForNTP(); epoch = time(NULL); }
+    if (epoch < 100000) {
+      Serial.println("NTP not ready yet, skipping publish this cycle.");
+      return;
+    }
 
+    // Build & publish payload
     char payload[256];
     int n = snprintf(payload, sizeof(payload),
       "{\"ts\":%ld,\"temp_c\":%.2f,\"rh_pct\":%.2f,"
       "\"tvoc_ppb\":%d,\"eco2_ppm\":%d,\"dust_ugm3\":%.2f,"
       "\"aqi\":%d,\"device_id\":\"%s\"}",
-      (long)epoch, avgT, h, (int)avgTVOC, (int)avgECO2, avgDust,
-      aqi, DEVICE_ID
+      (long)epoch, avgT, avgH, avgTVOC, avgECO2, avgDust,  // FIX #1 — avgH
+      avgAQI, DEVICE_ID                                      // FIX #2 — avgAQI
     );
 
     if (n > 0 && n < (int)sizeof(payload)) {
@@ -249,11 +324,11 @@ void loop() {
         Serial.print("Published: ");
         Serial.println(payload);
       } else {
-        Serial.println("Publish failed, will reconnect MQTT...");
+        Serial.println("Publish failed, disconnecting MQTT for reconnect...");
         client.disconnect();
       }
     } else {
-      Serial.println("Payload too long / format error");
+      Serial.println("Payload error: too long or format issue.");
     }
   }
 }
@@ -390,11 +465,11 @@ void update_display(float t, float h, int aqi, int tvoc, int eco2, float dust) {
   Serial.println("      AIR QUALITY MONITOR DATA        ");
   Serial.println("======================================");
   Serial.printf("Temperature (avg °C): %.1f\n", t);
-  Serial.printf("Humidity (%%): %.0f\n", h);
+  Serial.printf("Humidity (avg %%): %.0f\n", h);
   Serial.printf("TVOC (avg ppb): %d\n", tvoc);
   Serial.printf("eCO2 (avg ppm): %d\n", eco2);
-  Serial.printf("Dust (ug/m3): %.1f\n", dust);
-  Serial.printf("AQI (1–5): %d\n", aqi);
+  Serial.printf("Dust (avg ug/m3): %.1f\n", dust);
+  Serial.printf("AQI (avg 1-5): %d\n", aqi);
   Serial.printf("Status: %s\n", status);
   Serial.println("======================================\n");
 }
