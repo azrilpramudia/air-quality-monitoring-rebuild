@@ -71,11 +71,11 @@ void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map);
 /*********** Running Average ***********/
 #define AVG_WINDOW 10
 float tempBuffer[AVG_WINDOW];
-float humBuffer[AVG_WINDOW];   // FIX #1
+float humBuffer[AVG_WINDOW];  
 int   tvocBuffer[AVG_WINDOW];
 int   eco2Buffer[AVG_WINDOW];
 float dustBuffer[AVG_WINDOW];
-int   aqiBuffer[AVG_WINDOW];   // FIX #2
+int   aqiBuffer[AVG_WINDOW];  
 int   avgIndex    = 0;
 bool  bufferFilled = false;
 
@@ -114,7 +114,7 @@ void handleWiFiReconnect() {
   wifiAttempting  = true;
 
   Serial.println("WiFi disconnected, triggering reconnect...");
-  WiFi.disconnect(true);   // FIX #3 — force disconnect sebelum begin ulang
+  WiFi.disconnect(true);   
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   // Tidak ada while/delay — return langsung, loop() lanjut normal
 }
