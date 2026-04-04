@@ -21,17 +21,18 @@ export class SensorService {
   async saveReading(
     payload: MqttPayloadDto,
   ): Promise<SensorReadingResponseDto> {
-    // Upsert device — buat jika belum ada, skip jika sudah
+    // ✅ Upsert device dulu, tunggu selesai
     await this.prisma.device.upsert({
       where: { deviceId: payload.device_id },
       update: {},
       create: { deviceId: payload.device_id },
     });
 
+    // ✅ Baru create reading
     const reading = await this.prisma.sensorReading.create({
       data: {
         deviceId: payload.device_id,
-        timestamp: new Date(payload.ts * 1000), // epoch detik → ms
+        timestamp: new Date(payload.ts * 1000),
         tempC: payload.temp_c,
         rhPct: payload.rh_pct,
         tvocPpb: payload.tvoc_ppb,
@@ -57,13 +58,8 @@ export class SensorService {
   ): Promise<ReadingsListResponseDto> {
     const { from, to, limit = 100, deviceId } = query;
 
-    // Bangun filter where secara kondisional
     const where: Record<string, unknown> = {};
-
-    if (deviceId) {
-      where.deviceId = deviceId;
-    }
-
+    if (deviceId) where.deviceId = deviceId;
     if (from || to) {
       where.timestamp = {
         ...(from && { gte: new Date(from) }),
@@ -71,14 +67,13 @@ export class SensorService {
       };
     }
 
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.sensorReading.findMany({
-        where,
-        orderBy: { timestamp: 'desc' },
-        take: limit,
-      }),
-      this.prisma.sensorReading.count({ where }),
-    ]);
+    const data = await this.prisma.sensorReading.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    });
+
+    const total = await this.prisma.sensorReading.count({ where });
 
     return {
       data: data.map((r) => this.toResponseDto(r)),
@@ -135,29 +130,28 @@ export class SensorService {
   async getStats(deviceId?: string): Promise<Record<string, unknown>> {
     const where = deviceId ? { deviceId } : {};
 
-    const [avgResult, totalCount, latestReading] =
-      await this.prisma.$transaction([
-        // Rata-rata semua nilai sensor
-        this.prisma.sensorReading.aggregate({
-          where,
-          _avg: {
-            tempC: true,
-            rhPct: true,
-            tvocPpb: true,
-            eco2Ppm: true,
-            dustUgm3: true,
-            aqi: true,
-          },
-          _max: { aqi: true, tvocPpb: true, dustUgm3: true },
-          _min: { aqi: true },
-        }),
-        this.prisma.sensorReading.count({ where }),
-        this.prisma.sensorReading.findFirst({
-          where,
-          orderBy: { timestamp: 'desc' },
-          select: { timestamp: true, aqi: true },
-        }),
-      ]);
+    // ✅ Ganti $transaction([]) dengan tiga query sequential
+    const avgResult = await this.prisma.sensorReading.aggregate({
+      where,
+      _avg: {
+        tempC: true,
+        rhPct: true,
+        tvocPpb: true,
+        eco2Ppm: true,
+        dustUgm3: true,
+        aqi: true,
+      },
+      _max: { aqi: true, tvocPpb: true, dustUgm3: true },
+      _min: { aqi: true },
+    });
+
+    const totalCount = await this.prisma.sensorReading.count({ where });
+
+    const latestReading = await this.prisma.sensorReading.findFirst({
+      where,
+      orderBy: { timestamp: 'desc' },
+      select: { timestamp: true, aqi: true },
+    });
 
     return {
       totalReadings: totalCount,

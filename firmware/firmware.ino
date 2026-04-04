@@ -24,7 +24,7 @@
 #define WIFI_PASS     "kotakembang"
 #define MQTT_SERVER   "broker.emqx.io"
 #define MQTT_PORT     1883
-#define MQTT_TOPIC    "uninus/iot/air_quality/esp32-01"
+#define MQTT_TOPIC    "home/iot/air_quality/esp32-01"
 #define DEVICE_ID     "esp32-01-client-io"
 #define SHT31_I2C_ADDR  0x44
 #define MQTT_RECONNECT_INTERVAL_MS  10000UL
