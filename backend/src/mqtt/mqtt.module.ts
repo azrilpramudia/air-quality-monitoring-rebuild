@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MqttService } from './mqtt.service';
 import { SensorModule } from '../sensor/sensor.module';
-import { WebsocketModule } from '../websocket/websocket.module';
+import { WebsocketModule } from '../websocket/ws.module';
 
 @Module({
   imports: [
