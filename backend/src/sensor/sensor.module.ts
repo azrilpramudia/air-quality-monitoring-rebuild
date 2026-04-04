@@ -7,6 +7,6 @@ import { PrismaModule } from '../prisma/prisma.module';
   imports: [PrismaModule],
   providers: [SensorService],
   controllers: [SensorController],
-  exports: [SensorService], // di-export agar MqttService bisa inject
+  exports: [SensorService],
 })
 export class SensorModule {}

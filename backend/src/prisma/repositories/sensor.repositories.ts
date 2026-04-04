@@ -87,7 +87,6 @@ export class SensorRepository {
     from: Date,
     to: Date,
   ): Promise<AggregatedReading[]> {
-    // Raw query karena Prisma belum support DATE_FORMAT aggregate
     const rows = await this.prisma.$queryRaw<
       Array<{
         hour: Date;

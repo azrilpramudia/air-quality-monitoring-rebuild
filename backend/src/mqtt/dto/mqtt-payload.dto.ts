@@ -7,23 +7,6 @@ import {
   IsPositive,
 } from 'class-validator';
 
-/**
- * Validasi struktur payload JSON dari ESP32.
- * Jika field tidak sesuai, pesan akan ditolak di MqttService
- * sebelum menyentuh database atau WebSocket.
- *
- * Contoh payload dari ESP32:
- * {
- *   "ts": 1711880400,
- *   "temp_c": 31.72,
- *   "rh_pct": 71.0,
- *   "tvoc_ppb": 903,
- *   "eco2_ppm": 950,
- *   "dust_ugm3": 0.0,
- *   "aqi": 3,
- *   "device_id": "esp32-01-client-io"
- * }
- */
 export class MqttPayloadDto {
   @IsPositive()
   @IsNumber()

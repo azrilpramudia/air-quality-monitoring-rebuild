@@ -14,7 +14,7 @@ import { Type } from 'class-transformer';
 export class GetReadingsQueryDto {
   @IsOptional()
   @IsDateString()
-  from?: string; // ISO 8601, contoh: "2026-03-31T00:00:00Z"
+  from?: string;
 
   @IsOptional()
   @IsDateString()
@@ -25,11 +25,11 @@ export class GetReadingsQueryDto {
   @IsInt()
   @Min(1)
   @Max(1000)
-  limit?: number = 100; // default 100 record
+  limit?: number = 100;
 
   @IsOptional()
   @IsString()
-  deviceId?: string; // filter by device
+  deviceId?: string;
 }
 
 // ─────────────────────────────────────────

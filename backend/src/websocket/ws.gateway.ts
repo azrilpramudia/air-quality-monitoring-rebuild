@@ -13,16 +13,12 @@ import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { MqttPayloadDto } from '../mqtt/dto/mqtt-payload.dto';
 
-// Event name constants — satu sumber kebenaran,
-// sama persis yang dipakai di frontend
 export const WS_EVENTS = {
-  // Server → Client
-  SENSOR_DATA: 'sensor:data', // broadcast data realtime tiap 5 detik
-  SENSOR_LATEST: 'sensor:latest', // response untuk permintaan data terbaru
-  ERROR: 'error', // error notification ke client
+  SENSOR_DATA: 'sensor:data',
+  SENSOR_LATEST: 'sensor:latest',
+  ERROR: 'error',
 
-  // Client → Server
-  GET_LATEST: 'sensor:get_latest', // client minta data terbaru saat pertama connect
+  GET_LATEST: 'sensor:get_latest',
 } as const;
 
 @WebSocketGateway({
@@ -31,8 +27,8 @@ export const WS_EVENTS = {
     methods: ['GET', 'POST'],
     credentials: true,
   },
-  namespace: '/ws', // endpoint: ws://localhost:3001/ws
-  transports: ['websocket'], // hanya pakai WebSocket, bukan long-polling
+  namespace: '/ws',
+  transports: ['websocket'],
 })
 export class WebsocketGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
@@ -42,10 +38,8 @@ export class WebsocketGateway
   @WebSocketServer()
   private server: Server;
 
-  // Cache data terbaru — dikirim ke client baru yang baru connect
   private latestData: MqttPayloadDto | null = null;
 
-  // Track jumlah client yang terkoneksi
   private connectedClients = 0;
 
   constructor(private readonly configService: ConfigService) {}
@@ -66,8 +60,6 @@ export class WebsocketGateway
       `Client connected: ${client.id} | total: ${this.connectedClients}`,
     );
 
-    // Langsung kirim data terbaru ke client yang baru connect
-    // agar dashboard tidak kosong saat pertama dibuka
     if (this.latestData) {
       client.emit(WS_EVENTS.SENSOR_LATEST, this.latestData);
     }
@@ -83,10 +75,6 @@ export class WebsocketGateway
     );
   }
 
-  // ─────────────────────────────────────────
-  //  Event — client meminta data terbaru secara eksplisit
-  //  Berguna saat frontend reconnect atau tab kembali aktif
-  // ─────────────────────────────────────────
   @SubscribeMessage(WS_EVENTS.GET_LATEST)
   handleGetLatest(@ConnectedSocket() client: Socket) {
     if (this.latestData) {
@@ -96,15 +84,9 @@ export class WebsocketGateway
     }
   }
 
-  // ─────────────────────────────────────────
-  //  Broadcast — dipanggil oleh MqttService setiap data baru masuk
-  //  Mengirim ke SEMUA client yang sedang terkoneksi
-  // ─────────────────────────────────────────
   broadcastSensorData(data: MqttPayloadDto): void {
-    // Update cache
     this.latestData = data;
 
-    // Tidak perlu broadcast jika tidak ada yang mendengarkan
     if (this.connectedClients === 0) return;
 
     this.server.emit(WS_EVENTS.SENSOR_DATA, data);
@@ -114,9 +96,6 @@ export class WebsocketGateway
     );
   }
 
-  // ─────────────────────────────────────────
-  //  Getter — dipakai oleh SensorController jika perlu
-  // ─────────────────────────────────────────
   getConnectedClientsCount(): number {
     return this.connectedClients;
   }

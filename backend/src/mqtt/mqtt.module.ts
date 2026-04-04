@@ -4,10 +4,7 @@ import { SensorModule } from '../sensor/sensor.module';
 import { WebsocketModule } from '../websocket/ws.module';
 
 @Module({
-  imports: [
-    SensorModule, // untuk simpan data ke DB
-    WebsocketModule, // untuk broadcast realtime ke frontend
-  ],
+  imports: [SensorModule, WebsocketModule],
   providers: [MqttService],
   exports: [MqttService],
 })

@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MqttPayloadDto } from '../mqtt/dto/mqtt-payload.dto';
 import {
@@ -21,14 +27,12 @@ export class SensorService {
   async saveReading(
     payload: MqttPayloadDto,
   ): Promise<SensorReadingResponseDto> {
-    // ✅ Upsert device dulu, tunggu selesai
     await this.prisma.device.upsert({
       where: { deviceId: payload.device_id },
       update: {},
       create: { deviceId: payload.device_id },
     });
 
-    // ✅ Baru create reading
     const reading = await this.prisma.sensorReading.create({
       data: {
         deviceId: payload.device_id,
@@ -58,8 +62,16 @@ export class SensorService {
   ): Promise<ReadingsListResponseDto> {
     const { from, to, limit = 100, deviceId } = query;
 
-    const where: Record<string, unknown> = {};
-    if (deviceId) where.deviceId = deviceId;
+    if (from && to && new Date(from) > new Date(to)) {
+      throw new BadRequestException('from date must be earlier than to date');
+    }
+
+    const where: Prisma.SensorReadingWhereInput = {};
+
+    if (deviceId) {
+      where.deviceId = deviceId;
+    }
+
     if (from || to) {
       where.timestamp = {
         ...(from && { gte: new Date(from) }),
@@ -70,7 +82,7 @@ export class SensorService {
     const data = await this.prisma.sensorReading.findMany({
       where,
       orderBy: { timestamp: 'desc' },
-      take: limit,
+      take: Number(limit),
     });
 
     const total = await this.prisma.sensorReading.count({ where });
@@ -88,14 +100,13 @@ export class SensorService {
   //  GET /api/v1/sensors/latest
   // ─────────────────────────────────────────
   async getLatestReading(deviceId?: string): Promise<LatestReadingResponseDto> {
-    const where = deviceId ? { deviceId } : {};
+    const where: Prisma.SensorReadingWhereInput = deviceId ? { deviceId } : {};
 
     const reading = await this.prisma.sensorReading.findFirst({
       where,
       orderBy: { timestamp: 'desc' },
     });
 
-    // Daftar semua device yang pernah kirim data
     const devices = await this.prisma.device.findMany({
       select: { deviceId: true },
     });
@@ -128,9 +139,8 @@ export class SensorService {
   //  GET /api/v1/sensors/stats
   // ─────────────────────────────────────────
   async getStats(deviceId?: string): Promise<Record<string, unknown>> {
-    const where = deviceId ? { deviceId } : {};
+    const where: Prisma.SensorReadingWhereInput = deviceId ? { deviceId } : {};
 
-    // ✅ Ganti $transaction([]) dengan tiga query sequential
     const avgResult = await this.prisma.sensorReading.aggregate({
       where,
       _avg: {

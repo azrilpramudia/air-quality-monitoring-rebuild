@@ -8,19 +8,15 @@ import { WebsocketModule } from './websocket/ws.module';
 
 @Module({
   imports: [
-    // 1. Config — harus paling atas agar .env tersedia di semua module
     ConfigModule.forRoot({ isGlobal: true }),
 
-    // 2. Common — global filter & interceptor, berlaku di seluruh app
     CommonModule,
 
-    // 3. Prisma — shared DB client
     PrismaModule,
 
-    // 4. Feature modules
     SensorModule,
     WebsocketModule,
-    MqttModule, // paling akhir karena depend on Sensor & Websocket
+    MqttModule,
   ],
 })
 export class AppModule {}

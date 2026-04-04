@@ -18,12 +18,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MqttService.name);
   private client: MqttClient;
 
-  // Interval untuk save ke DB (1 menit = 60_000 ms)
   private readonly DB_SAVE_INTERVAL_MS = 60_000;
   private lastSavedAt = 0;
 
-  // Buffer menyimpan data terbaru dari ESP32
-  // akan di-flush ke DB setiap 1 menit
   private latestPayload: MqttPayloadDto | null = null;
 
   constructor(
@@ -62,7 +59,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     this.client = mqtt.connect(brokerUrl, {
       clientId,
       clean: true,
-      reconnectPeriod: 5000, // auto-reconnect setiap 5 detik jika putus
+      reconnectPeriod: 5000,
       connectTimeout: 10_000,
     });
 
@@ -107,7 +104,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   private handleMessage(topic: string, message: Buffer) {
     let raw: unknown;
 
-    // 1. Parse JSON — tolak jika malformed
     try {
       raw = JSON.parse(message.toString());
     } catch {
@@ -115,7 +111,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // 2. Validasi struktur payload dengan DTO
     const dto = plainToInstance(MqttPayloadDto, raw);
     const errors = validateSync(dto);
     if (errors.length > 0) {
@@ -129,13 +124,10 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       `[${dto.device_id}] AQI=${dto.aqi} TVOC=${dto.tvoc_ppb}ppb Dust=${dto.dust_ugm3}ug/m3`,
     );
 
-    // 3. Simpan sebagai payload terbaru
     this.latestPayload = dto;
 
-    // 4. Broadcast realtime ke semua client WebSocket (setiap data masuk ~5 detik)
     this.wsGateway.broadcastSensorData(dto);
 
-    // 5. Simpan ke database setiap 1 menit (throttle)
     this.maybeSaveToDB(dto);
   }
 
@@ -148,15 +140,11 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     this.lastSavedAt = now;
 
-    // Fire-and-forget dengan error handling agar tidak crash service
     this.sensorService.saveReading(dto).catch((err: Error) => {
       this.logger.error(`Failed to save reading to DB: ${err.message}`);
     });
   }
 
-  // ─────────────────────────────────────────
-  //  Getter untuk data terbaru (opsional — bisa dipakai controller)
-  // ─────────────────────────────────────────
   getLatestPayload(): MqttPayloadDto | null {
     return this.latestPayload;
   }

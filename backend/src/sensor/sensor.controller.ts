@@ -11,18 +11,6 @@ import {
 import { SensorService } from './sensor.service';
 import { GetReadingsQueryDto } from './dto/sensor.dto';
 
-/**
- * REST API untuk data sensor.
- * Base URL: /api/v1/sensors
- *
- * Endpoints:
- *  GET /api/v1/sensors/latest           — data terbaru (semua device)
- *  GET /api/v1/sensors/latest/:deviceId — data terbaru per device
- *  GET /api/v1/sensors/stats            — statistik ringkas
- *  GET /api/v1/sensors/stats/:deviceId  — statistik per device
- *  GET /api/v1/sensors/readings         — data historis (dengan filter)
- *  GET /api/v1/sensors/readings/:id     — satu reading by ID
- */
 @Controller('sensors')
 export class SensorController {
   constructor(private readonly sensorService: SensorService) {}
@@ -69,7 +57,6 @@ export class SensorController {
 
   // ─────────────────────────────────────────
   //  GET /sensors/readings?from=&to=&limit=&deviceId=
-  //  Data historis dengan filter opsional
   //
   //  Contoh:
   //  /sensors/readings?from=2026-03-31T00:00:00Z&to=2026-03-31T23:59:59Z
