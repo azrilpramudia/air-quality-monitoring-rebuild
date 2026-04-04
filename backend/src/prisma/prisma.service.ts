@@ -4,7 +4,9 @@ import {
   OnModuleDestroy,
   Logger,
 } from '@nestjs/common';
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
 @Injectable()
 export class PrismaService
@@ -14,27 +16,24 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    super({
-      log: [
-        { emit: 'event', level: 'query' },
-        { emit: 'stdout', level: 'error' },
-        { emit: 'stdout', level: 'warn' },
-      ],
+    const adapter = new PrismaMariaDb({
+      host: process.env.DB_HOST ?? 'localhost',
+      port: Number(process.env.DB_PORT ?? 3306),
+      user: process.env.DB_USER ?? 'root',
+      password: process.env.DB_PASSWORD ?? '',
+      database: process.env.DB_NAME ?? 'air_quality_db',
+      connectionLimit: 5,
     });
+    super({ adapter });
   }
 
-  async onModuleInit(): Promise<void> {
-    try {
-      await this.$connect();
-      this.logger.log('Database connected successfully');
-    } catch (error) {
-      this.logger.error('Failed to connect to database', error);
-      throw error;
-    }
+  async onModuleInit() {
+    await this.$connect();
+    this.logger.log('Database connected.');
   }
 
-  async onModuleDestroy(): Promise<void> {
+  async onModuleDestroy() {
     await this.$disconnect();
-    this.logger.log('Database disconnected');
+    this.logger.log('Database disconnected.');
   }
 }
