@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Device {
+  id         String       @id @default(uuid())
+  deviceId   String       @unique @map("device_id")
+  name       String?
+  createdAt  DateTime     @default(now()) @map("created_at")
+  readings   SensorReading[]
+
+  @@map("devices")
+}
+
+model SensorReading {
+  id         Int      @id @default(autoincrement())
+  deviceId   String   @map("device_id")
+  device     Device   @relation(fields: [deviceId], references: [deviceId])
+  timestamp  DateTime
+  tempC      Float    @map("temp_c")
+  rhPct      Float    @map("rh_pct")
+  tvocPpb    Int      @map("tvoc_ppb")
+  eco2Ppm    Int      @map("eco2_ppm")
+  dustUgm3   Float    @map("dust_ugm3")
+  aqi        Int
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([deviceId, timestamp])
+  @@map("sensor_readings")
+}
