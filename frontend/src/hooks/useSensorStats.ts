@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { sensorApi } from "@../../../src/lib/api";
-import { useSensorStore } from "@../../../src/stores/sensorStore";
-import type { SensorStats } from "@../../../src/types/sensor.types";
+import { sensorApi } from "@/src/lib/api";
+import { useSensorStore } from "@/src/stores/sensorStore";
+import type { SensorStats } from "@/src/types/sensor.types";
 
 // ─────────────────────────────────────────
 //  useSensorStats
-//
 // ─────────────────────────────────────────
 export function useSensorStats(deviceId?: string) {
   return useQuery<SensorStats>({

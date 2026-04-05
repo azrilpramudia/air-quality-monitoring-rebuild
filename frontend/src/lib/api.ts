@@ -5,18 +5,15 @@ import type {
   LatestReadingResponse,
   ReadingsListResponse,
   SensorStats,
-} from "@../../../src/types/sensor.types";
+} from "@/src/types/sensor.types";
 
 const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   timeout: 10_000,
 });
 
-// Interceptor — unwrap envelope { success, data, timestamp } secara otomatis
 apiClient.interceptors.response.use(
   (response) => {
-    // Backend selalu return { success, data, ... }
-    // Kita unwrap agar caller langsung dapat datanya
     if (response.data?.success) {
       return { ...response, data: response.data.data };
     }

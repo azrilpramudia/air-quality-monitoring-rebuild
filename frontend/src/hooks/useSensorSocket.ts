@@ -1,13 +1,7 @@
 import { useEffect, useRef } from "react";
-import { getSocket } from "@../../../src//lib/socket";
-import {
-  useSensorStore,
-  selectIsConnected,
-} from "@../../../src/stores/sensorStore";
-import {
-  WS_EVENTS,
-  type SensorReading,
-} from "@../../../src/types/sensor.types";
+import { getSocket } from "@/src//lib/socket";
+import { useSensorStore, selectIsConnected } from "@/src/stores/sensorStore";
+import { WS_EVENTS, type SensorReading } from "@/src/types/sensor.types";
 
 // ─────────────────────────────────────────
 //  useSensorSocket

@@ -1,4 +1,3 @@
-// Shape data realtime dari WebSocket (sama persis dengan MqttPayloadDto di backend)
 export interface SensorReading {
   id: number;
   deviceId: string;

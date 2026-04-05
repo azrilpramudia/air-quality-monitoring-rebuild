@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/purity */
 import { useQuery } from "@tanstack/react-query";
-import { sensorApi } from "@../../../src/lib/api";
-import type { ReadingsListResponse } from "@../../../src/types/sensor.types";
+import { sensorApi } from "@/src/lib/api";
+import type { ReadingsListResponse } from "@/src/types/sensor.types";
 
 interface UseSensorHistoryParams {
   from?: string;

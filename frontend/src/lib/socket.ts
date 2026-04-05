@@ -1,6 +1,5 @@
 import { io, Socket } from "socket.io-client";
 
-// Singleton socket — dibuat sekali, dipakai di seluruh app
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
