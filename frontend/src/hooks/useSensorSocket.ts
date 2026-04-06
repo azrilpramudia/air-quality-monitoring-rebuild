@@ -31,11 +31,12 @@ export function useSensorSocket() {
     };
 
     const onSensorData = (data: SensorReading) => {
+      console.log("WS data received:", data); // ← tambah ini sementara
       setLatest(data);
     };
 
     const onSensorLatest = (data: SensorReading) => {
-      // Sama seperti sensor:data tapi untuk initial load
+      console.log("WS latest received:", data); // ← tambah ini sementara
       setLatest(data);
     };
 

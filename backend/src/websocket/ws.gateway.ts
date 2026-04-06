@@ -86,11 +86,20 @@ export class WebsocketGateway
 
   broadcastSensorData(data: MqttPayloadDto): void {
     this.latestData = data;
-
     if (this.connectedClients === 0) return;
 
-    this.server.emit(WS_EVENTS.SENSOR_DATA, data);
+    const payload = {
+      deviceId: data.device_id,
+      timestamp: new Date(data.ts * 1000).toISOString(),
+      tempC: data.temp_c,
+      rhPct: data.rh_pct,
+      tvocPpb: data.tvoc_ppb,
+      eco2Ppm: data.eco2_ppm,
+      dustUgm3: data.dust_ugm3,
+      aqi: data.aqi,
+    };
 
+    this.server.emit(WS_EVENTS.SENSOR_DATA, payload);
     this.logger.debug(
       `Broadcast to ${this.connectedClients} client(s) — AQI: ${data.aqi}`,
     );
