@@ -12,6 +12,8 @@ import { AqiGauge } from "@/src/components/dashboard/AqiGauge";
 import { SensorCard } from "@/src/components/dashboard/SensorCard";
 import { SensorChart } from "@/src/components/dashboard/SensorChart";
 import { ConnectionStatus } from "@/src/components/dashboard/ConnectionStatus";
+import { AlertBanner } from "@/src/components/dashboard/AlertBanner";
+import { ThresholdSettings } from "@/src/components/dashboard/ThresholdSettings";
 import type { ChartMetric } from "@/src/components/dashboard/SensorChart";
 
 //  Sensor card config
@@ -175,12 +177,16 @@ export default function DashboardPage() {
               Air Quality Monitor
             </h1>
           </div>
-          <ConnectionStatus />
+          <div className="flex items-center gap-3">
+            <ThresholdSettings />
+            <ConnectionStatus />
+          </div>
         </div>
       </header>
 
       {/* ── Main content ─────────────────── */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        <AlertBanner />
         {/* ── Row 1: AQI Gauge + Sensor Cards ── */}
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
           {/* AQI Gauge */}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSensorSocket } from "@/src/hooks/useSensorSocket";
+import { useThresholdAlert } from "@/src/hooks/useThresholdAlert";
 
 //  QueryClient config
 function makeQueryClient() {
@@ -24,6 +25,7 @@ function makeQueryClient() {
 
 function WebSocketInitializer() {
   useSensorSocket();
+  useThresholdAlert();
   return null;
 }
 
